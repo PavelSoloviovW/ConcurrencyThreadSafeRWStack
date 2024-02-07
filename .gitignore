@@ -1,0 +1,16 @@
+*.idb
+*.pdb
+*.obj
+*.log
+*.vcxproj.FileListAbsolute.txt
+*.tlog
+*.ilk
+*.exe
+*.exe*
+
+.vs
+Debug
+x64
+x86
+
+unsuccessfulbuild
