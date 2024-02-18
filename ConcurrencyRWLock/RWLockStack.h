@@ -57,6 +57,7 @@ namespace ThreadSafeStructs
 		RWLockStack<T>& PushRange(RWLockStack<T>&& stack);
 		RWLockStack<T>& PushRange(const std::stack<T>& stack);
 		RWLockStack<T>& PushRange(std::stack<T>&& stack);
+		//TODO Operator = 
 		T TryPop();
 		T WhaitAndPop();
 

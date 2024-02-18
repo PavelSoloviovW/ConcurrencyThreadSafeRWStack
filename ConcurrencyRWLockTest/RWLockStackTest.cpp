@@ -91,6 +91,27 @@ namespace
 		}
 		return outStack;
 	}
+
+	int AnalyzeFuturesGetExceptionsCount(std::list<std::future<void>>& threadProcessFinishedFeatures)
+	{
+		uint16_t exceptionCount = 0;
+		for (auto& featureReady : threadProcessFinishedFeatures)
+		{
+			try
+			{
+				featureReady.get();
+			}
+			catch (const ThreadSafeStructs::ThreadSafetyException&)
+			{
+				++exceptionCount;
+			}
+			catch (const std::exception&)
+			{
+				throw std::runtime_error("Not correct exception type gotten");
+			}
+		}
+		return exceptionCount;
+	}
 }
 
 TEST(RWLockStack, CreateContainer_Empty)
@@ -493,15 +514,25 @@ TEST(RWLockStack, PushWithSingleAdditionalThread)
 	whaitForTestingThreadReady.wait();
 	testerThreadReady.set_value();
 
-	workDone.get();
+	try
+	{
+		workDone.get();
+	}
+	catch (const std::exception&)
+	{
+		ASSERT_TRUE(false);
+	}
 	EXPECT_EQ(container.Size(), 10);
 }
 
-TEST(RWLockStack, PushWithAdditionalThreads_SOME_PROBLEM)
+TEST(RWLockStack, PushWithMultipleThreads_PROMISE_SPECIFICITY_TESTS)
 {
+	//Special test promise test
+	//Problem reson if we destroy promise future not works.
+	//comment comment out these lines to check. Set value not exists but wait command is ignored, if comment just set_value line it will wait for commented set_value.
 	ThreadSafeStructs::RWLockStack<int> container;
 	const auto numberOfGeneratedNumbers = 10;
-	const auto numberOfTestingThreads = 2;
+	const auto numberOfTestingThreads = 10;
 
 	auto checkingFunction = [](const int numberOfAddedItems, ThreadSafeStructs::RWLockStack<int>& container)
 		{
@@ -515,37 +546,43 @@ TEST(RWLockStack, PushWithAdditionalThreads_SOME_PROBLEM)
 	std::shared_future<void> mainThreadReadyFeature(mainThreadReadyPromise.get_future());
 	std::list<std::future<void>> threadReadyFeatures;
 	std::list<std::future<void>> threadProcessFinishedFeatures;
+	std::list<std::unique_ptr<std::promise<void>>> threadReadyPromise;
 
 	for (int threadToTest = 0; threadToTest < numberOfTestingThreads; ++threadToTest)
 	{
-		auto currentThreadPromise = std::promise<void>();
-		threadReadyFeatures.push_back(currentThreadPromise.get_future());
-
-		auto threadDoneFeature = std::async(std::launch::async, [checkingFunction, numberOfGeneratedNumbers, &container, &currentThreadPromise, &mainThreadReadyFeature]()
+		auto currentThreadPromise = std::make_unique<std::promise<void>>();
+		auto threadDoneFeature = std::async(std::launch::async, [checkingFunction, numberOfGeneratedNumbers, &container, &mainThreadReadyFeature](std::promise<void>& currentThreadPromise)
 			{
-				//currentThreadPromise.set_value(); //Some problem, wait is not works
+				currentThreadPromise.set_value(); //comment this line
 				mainThreadReadyFeature.wait();
 				checkingFunction(numberOfGeneratedNumbers, container);
-			}
+			},
+			std::ref(*currentThreadPromise.get())
 		);
+
+		threadReadyFeatures.push_back(currentThreadPromise->get_future());
+		threadReadyPromise.push_back(std::move(currentThreadPromise)); //comment this line
 		threadProcessFinishedFeatures.push_back(std::move(threadDoneFeature));
 	}
 
-	for (auto featureReady = threadReadyFeatures.begin(); featureReady != threadReadyFeatures.end(); ++featureReady)
+	for (auto& featureReady : threadReadyFeatures)
 	{
-		featureReady->wait(); //Some problem, wait is not works
+		featureReady.wait();
 	}
 	mainThreadReadyPromise.set_value();
 
-	for (auto featureReady = threadProcessFinishedFeatures.begin(); featureReady != threadProcessFinishedFeatures.end(); ++featureReady)
+	try
 	{
-		featureReady->wait();
+		EXPECT_EQ(AnalyzeFuturesGetExceptionsCount(threadProcessFinishedFeatures), 0);
 	}
-
+	catch (const std::exception&)
+	{
+		ASSERT_TRUE(false);
+	}
 	EXPECT_EQ(container.Size(), 100);
 }
 
-TEST(RWLockStack, PushWithAdditionalThreads)
+TEST(RWLockStack, PushWithMultipleThreads)
 {
 	ThreadSafeStructs::RWLockStack<int> container;
 	const auto numberOfGeneratedNumbers = 10;
@@ -580,16 +617,209 @@ TEST(RWLockStack, PushWithAdditionalThreads)
 		threadProcessFinishedFeatures.push_back(std::move(threadDoneFeature));
 	}
 
-	for (auto featureReady = threadReadyPromise.begin(); featureReady != threadReadyPromise.end(); ++featureReady)
+	for (auto& featureReady : threadReadyPromise)
 	{
-		featureReady->get()->get_future().wait(); //but works in this configuration
+		featureReady.get()->get_future().wait();
 	}
+
 	mainThreadReadyPromise.set_value();
 
-	for (auto featureReady = threadProcessFinishedFeatures.begin(); featureReady != threadProcessFinishedFeatures.end(); ++featureReady)
+	try
 	{
-		featureReady->wait();
+		EXPECT_EQ(AnalyzeFuturesGetExceptionsCount(threadProcessFinishedFeatures), 0);
 	}
-
+	catch (const std::exception&)
+	{
+		ASSERT_TRUE(false);
+	}
 	EXPECT_EQ(container.Size(), 100);
 }
+
+TEST(RWLockStack, PopWithMultipleThreadsSomeElementsLeft)
+{
+	const auto numberOfGeneratedNumbers = 10;
+	const auto numberOfTestingThreads = 10;
+	const auto elementsShuldBeLeft = 20;
+
+	auto stackOrign = GetRandomStack(numberOfGeneratedNumbers * numberOfTestingThreads + elementsShuldBeLeft, MIN_MAX_RANDOM_VALUES);
+	ThreadSafeStructs::RWLockStack<int> container(stackOrign);
+	
+	auto checkingFunction = [](const int numberOfAddedItems, ThreadSafeStructs::RWLockStack<int>& container)
+		{
+			for (int numbersGenerated = 0; numbersGenerated < numberOfAddedItems; ++numbersGenerated)
+			{
+				container.TryPop();
+			}
+		};
+
+	std::promise<void> mainThreadReadyPromise;
+	std::shared_future<void> mainThreadReadyFeature(mainThreadReadyPromise.get_future());
+	std::list<std::unique_ptr<std::promise<void>>> threadReadyPromise;
+	std::list<std::future<void>> threadProcessFinishedFeatures;
+
+	for (int threadToTest = 0; threadToTest < numberOfTestingThreads; ++threadToTest)
+	{
+		auto currentThreadPromise = std::make_unique<std::promise<void>>();
+
+		auto threadDoneFeature = std::async(std::launch::async, [checkingFunction, numberOfGeneratedNumbers, &container, &mainThreadReadyFeature](std::promise<void>& currentThreadPromise)
+			{
+				currentThreadPromise.set_value();
+				mainThreadReadyFeature.wait();
+				checkingFunction(numberOfGeneratedNumbers, container);
+			},
+			std::ref(*currentThreadPromise.get())
+		);
+		threadReadyPromise.push_back(std::move(currentThreadPromise));
+		threadProcessFinishedFeatures.push_back(std::move(threadDoneFeature));
+	}
+
+	for (auto& featureReady : threadReadyPromise)
+	{
+		featureReady.get()->get_future().wait();
+	}
+
+	mainThreadReadyPromise.set_value();
+
+	try
+	{
+		EXPECT_EQ(AnalyzeFuturesGetExceptionsCount(threadProcessFinishedFeatures), 0);
+	}
+	catch (const std::exception&)
+	{
+		ASSERT_TRUE(false);
+	}
+	EXPECT_EQ(container.Size(), elementsShuldBeLeft);
+}
+
+TEST(RWLockStack, PopWithMultipleThreadsNoOneElementLeft)
+{
+	const auto numberOfGeneratedNumbers = 10;
+	const auto numberOfTestingThreads = 10;
+
+	auto stackOrign = GetRandomStack(numberOfGeneratedNumbers * numberOfTestingThreads, MIN_MAX_RANDOM_VALUES);
+	ThreadSafeStructs::RWLockStack<int> container(stackOrign);
+
+	auto checkingFunction = [](const int numberOfAddedItems, ThreadSafeStructs::RWLockStack<int>& container)
+		{
+			for (int numbersGenerated = 0; numbersGenerated < numberOfAddedItems; ++numbersGenerated)
+			{
+				container.TryPop();
+			}
+		};
+
+	std::promise<void> mainThreadReadyPromise;
+	std::shared_future<void> mainThreadReadyFeature(mainThreadReadyPromise.get_future());
+	std::list<std::unique_ptr<std::promise<void>>> threadReadyPromise;
+	std::list<std::future<void>> threadProcessFinishedFeatures;
+
+	for (int threadToTest = 0; threadToTest < numberOfTestingThreads; ++threadToTest)
+	{
+		auto currentThreadPromise = std::make_unique<std::promise<void>>();
+
+		auto threadDoneFeature = std::async(std::launch::async, [checkingFunction, numberOfGeneratedNumbers, &container, &mainThreadReadyFeature](std::promise<void>& currentThreadPromise)
+			{
+				currentThreadPromise.set_value();
+				mainThreadReadyFeature.wait();
+				checkingFunction(numberOfGeneratedNumbers, container);
+			},
+			std::ref(*currentThreadPromise.get())
+		);
+		threadReadyPromise.push_back(std::move(currentThreadPromise));
+		threadProcessFinishedFeatures.push_back(std::move(threadDoneFeature));
+	}
+
+	for (auto& featureReady : threadReadyPromise)
+	{
+		featureReady.get()->get_future().wait();
+	}
+
+	mainThreadReadyPromise.set_value();
+
+	try
+	{
+		EXPECT_EQ(AnalyzeFuturesGetExceptionsCount(threadProcessFinishedFeatures), 0);
+	}
+	catch (const std::exception&)
+	{
+		ASSERT_TRUE(false);
+	}
+	EXPECT_TRUE(container.Empty());
+}
+
+TEST(RWLockStack, PopWithMultipleThreadsPopMoreItemsThenAdded)
+{
+	const auto numberOfGeneratedNumbers = 10;
+	const auto numberOfTestingThreads = 10;
+
+	auto stackOrign = GetRandomStack(numberOfGeneratedNumbers * numberOfTestingThreads - 1, MIN_MAX_RANDOM_VALUES);
+	ThreadSafeStructs::RWLockStack<int> container(stackOrign);
+
+	auto checkingFunction = [](const int numberOfAddedItems, ThreadSafeStructs::RWLockStack<int>& container)
+		{
+			for (int numbersGenerated = 0; numbersGenerated < numberOfAddedItems; ++numbersGenerated)
+			{
+				container.TryPop();
+			}
+		};
+
+	std::promise<void> mainThreadReadyPromise;
+	std::shared_future<void> mainThreadReadyFeature(mainThreadReadyPromise.get_future());
+	std::list<std::unique_ptr<std::promise<void>>> threadReadyPromise;
+	std::list<std::future<void>> threadProcessFinishedFeatures;
+
+	for (int threadToTest = 0; threadToTest < numberOfTestingThreads; ++threadToTest)
+	{
+		auto currentThreadPromise = std::make_unique<std::promise<void>>();
+
+		//TODO to commons (callback as param)
+		auto threadDoneFeature = std::async(std::launch::async, [checkingFunction, numberOfGeneratedNumbers, &container, &mainThreadReadyFeature](std::promise<void>& currentThreadPromise)
+			{
+				currentThreadPromise.set_value();
+				mainThreadReadyFeature.wait();
+				checkingFunction(numberOfGeneratedNumbers, container);
+			},
+			std::ref(*currentThreadPromise.get())
+		);
+		threadReadyPromise.push_back(std::move(currentThreadPromise));
+		threadProcessFinishedFeatures.push_back(std::move(threadDoneFeature));
+	}
+
+	for (auto& featureReady : threadReadyPromise)
+	{
+		featureReady.get()->get_future().wait();
+	}
+
+	mainThreadReadyPromise.set_value();
+
+	try
+	{
+		EXPECT_EQ(AnalyzeFuturesGetExceptionsCount(threadProcessFinishedFeatures), 1);
+	}
+	catch (const std::exception&)
+	{
+		ASSERT_TRUE(false);
+	}
+	EXPECT_TRUE(container.Empty());
+}
+
+//TEST(RWLockStack, PushSpeceficValues)
+//{
+//	const auto numberOfGeneratedNumbers = 10;
+//	const auto numberOfTestingThreads = 10;
+//
+//	auto checkingFunction = [](const int speceficValue, const int numberOfAddedItems, ThreadSafeStructs::RWLockStack<int>& container)
+//		{
+//			for (int numbersGenerated = 0; numbersGenerated < numberOfAddedItems; ++numbersGenerated)
+//			{
+//				container.TryPop();
+//			}
+//		};
+//
+//
+//}
+
+//Get concret values
+
+//Push pop
+
+//Whait and pop
