@@ -57,6 +57,8 @@ namespace ThreadSafeStructs
 		RWLockStack<T>& PushRange(RWLockStack<T>&& stack);
 		RWLockStack<T>& PushRange(const std::stack<T>& stack);
 		RWLockStack<T>& PushRange(std::stack<T>&& stack);
+
+		std::stack<T> ExportOrignContainer();
 		//TODO Operator = 
 		T TryPop();
 		T WhaitAndPop();
@@ -207,5 +209,11 @@ namespace ThreadSafeStructs
 		auto dataItem = data.top();
 		data.pop();
 		return dataItem;
+	}
+
+	template<typename T>
+	std::stack<T> RWLockStack<T>::ExportOrignContainer()
+	{
+		return data;
 	}
 }
