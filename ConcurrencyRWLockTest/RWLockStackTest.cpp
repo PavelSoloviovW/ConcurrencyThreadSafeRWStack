@@ -2,6 +2,8 @@
 #include "RWLockStack.h"
 #include "ThreadSafeException.h"
 #include "ThreadToTest.h"
+#include "RWLStackTestUtils.h"
+#include "SeparatedThreadCallbackExecutor.h"
 
 namespace
 {
@@ -635,7 +637,7 @@ TEST(RWLockStack, PushWithMultipleThreads)
 	EXPECT_EQ(container.Size(), 100);
 }
 
-TEST(RWLockStack, PopWithMultipleThreadsSomeElementsLeft)
+TEST(RWLockStack, PopWithMultipleThreadsSomeElementsLeft_OLD)
 {
 	const auto numberOfGeneratedNumbers = 10;
 	const auto numberOfTestingThreads = 10;
@@ -687,6 +689,47 @@ TEST(RWLockStack, PopWithMultipleThreadsSomeElementsLeft)
 	catch (const std::exception&)
 	{
 		ASSERT_TRUE(false);
+	}
+	EXPECT_EQ(container.Size(), elementsShuldBeLeft);
+}
+
+
+TEST(RWLockStack, PopWithMultipleThreadsSomeElementsLeft)
+{
+	const auto numberOfGeneratedNumbers = 10;
+	const auto numberOfTestingThreads = 1;
+	const auto elementsShuldBeLeft = 20;
+
+	auto stackOrign = GetRandomStack(numberOfGeneratedNumbers * numberOfTestingThreads + elementsShuldBeLeft, MIN_MAX_RANDOM_VALUES);
+	ThreadSafeStructs::RWLockStack<int> container(stackOrign);
+
+	auto checkingFunction = [numberOfGeneratedNumbers, &container]()
+		{
+			for (int numbersGenerated = 0; numbersGenerated < numberOfGeneratedNumbers; ++numbersGenerated)
+			{
+				container.TryPop();
+			}
+		};
+
+	std::promise<void> mainThreadReadyPromise;
+	std::shared_future<void> mainThreadReadyFeature(mainThreadReadyPromise.get_future());
+	
+	std::list<SeparatedThreadCallbackExecutor<decltype(checkingFunction), int>> threadsExecutors;
+	
+	for (int threadToTest = 0; threadToTest < numberOfTestingThreads; ++threadToTest)
+	{
+		SeparatedThreadCallbackExecutor<decltype(checkingFunction), int> actionExecutor(checkingFunction, mainThreadReadyFeature);
+		threadsExecutors.push_back(std::move(actionExecutor));
+	}
+
+	for (auto& featureReady : threadsExecutors)
+	{
+		ASSERT_TRUE(featureReady.WaitForThreadReady());
+	}
+	mainThreadReadyPromise.set_value();
+	for (auto& featureReady : threadsExecutors)
+	{
+		ASSERT_TRUE(featureReady.WaitForThreadFinished());
 	}
 	EXPECT_EQ(container.Size(), elementsShuldBeLeft);
 }
@@ -866,6 +909,28 @@ TEST(RWLockStack, PushAndCheckSpeceficValuesWithMultipleThreads) //THIS NEED IN 
 	}
 }
 
+TEST(RWLockStack, test_new_executor) //THIS NEED IN REFACTORIN
+{
+	ThreadSafeStructs::RWLockStack<int> container;
+	const auto numberOfGeneratedNumbers = 10;
+
+	auto checkingFunction = [&container, numberOfGeneratedNumbers]()
+		{
+			for (int numbersGenerated = 0; numbersGenerated < numberOfGeneratedNumbers; ++numbersGenerated)
+			{
+				container.Push(GetRandomNumber(MIN_MAX_RANDOM_VALUES));
+			}
+		};
+
+	std::promise<void> mainThreadReadyPromise;
+	std::shared_future<void> mainThreadReadyFeature(mainThreadReadyPromise.get_future());
+	SeparatedThreadCallbackExecutor<decltype(checkingFunction), int> threadCallbackExecutor(checkingFunction, mainThreadReadyFeature);
+
+	threadCallbackExecutor.WaitForThreadReady();
+	mainThreadReadyPromise.set_value();
+	threadCallbackExecutor.WaitForThreadFinished();
+}
+
 //TODO get sequence from one thread if few threads works 
 
 //Get concret unique values
@@ -874,48 +939,48 @@ TEST(RWLockStack, PushAndCheckSpeceficValuesWithMultipleThreads) //THIS NEED IN 
 
 //Whait and pop
 
-TEST(RWLockStack, WhaitAndPopWithTwoThreadsThread)
-{
-	ThreadSafeStructs::RWLockStack<int> container;
-	const auto numberOfGeneratedNumbers = 10;
-
-	auto checkingFunction = [](const int numberOfAddedItems, ThreadSafeStructs::RWLockStack<int>& container)
-		{
-			for (int numbersGenerated = 0; numbersGenerated < numberOfAddedItems; ++numbersGenerated)
-			{
-				container.Push(GetRandomNumber(MIN_MAX_RANDOM_VALUES));
-			}
-		};
-
-	auto checkingFunction = [](const int numberOfAddedItems, ThreadSafeStructs::RWLockStack<int>& container)
-		{
-			for (int numbersGenerated = 0; numbersGenerated < numberOfAddedItems; ++numbersGenerated)
-			{
-				container.WhaitAndPop();
-			}
-		};
-
-	std::promise<void> testingThreadReady;
-	std::promise<void> testerThreadReady;
-	std::future<void> whaitForTesterThreadReady(testerThreadReady.get_future());
-	std::future<void> whaitForTestingThreadReady(testingThreadReady.get_future());
-	auto workDone = std::async(std::launch::async, [checkingFunction, numberOfGeneratedNumbers, &container, &testingThreadReady, &whaitForTesterThreadReady]() //TODO think how to cut catch params)
-		{
-			testingThreadReady.set_value();
-			whaitForTesterThreadReady.wait();
-			checkingFunction(numberOfGeneratedNumbers, container);
-		});
-
-	whaitForTestingThreadReady.wait();
-	testerThreadReady.set_value();
-
-	try
-	{
-		workDone.get();
-	}
-	catch (const std::exception&)
-	{
-		ASSERT_TRUE(false);
-	}
-	EXPECT_EQ(container.Size(), 10);
-}
+//TEST(RWLockStack, WhaitAndPopWithTwoThreadsThread)
+//{
+//	ThreadSafeStructs::RWLockStack<int> container;
+//	const auto numberOfGeneratedNumbers = 10;
+//
+//	auto checkingFunction = [](const int numberOfAddedItems, ThreadSafeStructs::RWLockStack<int>& container)
+//		{
+//			for (int numbersGenerated = 0; numbersGenerated < numberOfAddedItems; ++numbersGenerated)
+//			{
+//				container.Push(GetRandomNumber(MIN_MAX_RANDOM_VALUES));
+//			}
+//		};
+//
+//	auto checkingFunction = [](const int numberOfAddedItems, ThreadSafeStructs::RWLockStack<int>& container)
+//		{
+//			for (int numbersGenerated = 0; numbersGenerated < numberOfAddedItems; ++numbersGenerated)
+//			{
+//				container.WhaitAndPop();
+//			}
+//		};
+//
+//	std::promise<void> testingThreadReady;
+//	std::promise<void> testerThreadReady;
+//	std::future<void> whaitForTesterThreadReady(testerThreadReady.get_future());
+//	std::future<void> whaitForTestingThreadReady(testingThreadReady.get_future());
+//	auto workDone = std::async(std::launch::async, [checkingFunction, numberOfGeneratedNumbers, &container, &testingThreadReady, &whaitForTesterThreadReady]() //TODO think how to cut catch params)
+//		{
+//			testingThreadReady.set_value();
+//			whaitForTesterThreadReady.wait();
+//			checkingFunction(numberOfGeneratedNumbers, container);
+//		});
+//
+//	whaitForTestingThreadReady.wait();
+//	testerThreadReady.set_value();
+//
+//	try
+//	{
+//		workDone.get();
+//	}
+//	catch (const std::exception&)
+//	{
+//		ASSERT_TRUE(false);
+//	}
+//	EXPECT_EQ(container.Size(), 10);
+//}

@@ -134,12 +134,16 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="BaseThreadTestStrategy.h" />
+    <ClInclude Include="RWLStackTestUtils.h" />
+    <ClInclude Include="SeparatedThreadCallbackExecutor.h" />
     <ClInclude Include="stdfx.h" />
     <ClInclude Include="ThreadToTest.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
     <ClCompile Include="RWLockStackTest.cpp" />
+    <ClCompile Include="RWLStackTestUtils.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\ConcurrencyRWLock\ConcurrencyRWLock.vcxproj">

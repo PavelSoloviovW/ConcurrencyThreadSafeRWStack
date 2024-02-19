@@ -21,12 +21,24 @@
     <ClInclude Include="ThreadToTest.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="RWLStackTestUtils.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="BaseThreadTestStrategy.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SeparatedThreadCallbackExecutor.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="RWLockStackTest.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="RWLStackTestUtils.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
