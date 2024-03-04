@@ -714,22 +714,22 @@ TEST(RWLockStack, PopWithMultipleThreadsSomeElementsLeft)
 	std::promise<void> mainThreadReadyPromise;
 	std::shared_future<void> mainThreadReadyFeature(mainThreadReadyPromise.get_future());
 	
-	std::list<SeparatedThreadCallbackExecutor<decltype(checkingFunction), int>> threadsExecutors;
+	std::list<std::unique_ptr<SeparatedThreadCallbackExecutor<decltype(checkingFunction), int>>> threadsExecutors;
 	
 	for (int threadToTest = 0; threadToTest < numberOfTestingThreads; ++threadToTest)
 	{
-		SeparatedThreadCallbackExecutor<decltype(checkingFunction), int> actionExecutor(checkingFunction, mainThreadReadyFeature);
+		auto actionExecutor = std::make_unique<SeparatedThreadCallbackExecutor<decltype(checkingFunction), int>>(checkingFunction, mainThreadReadyFeature);
 		threadsExecutors.push_back(std::move(actionExecutor));
 	}
 
 	for (auto& featureReady : threadsExecutors)
 	{
-		ASSERT_TRUE(featureReady.WaitForThreadReady());
+		ASSERT_TRUE(featureReady->WaitForThreadReady());
 	}
 	mainThreadReadyPromise.set_value();
 	for (auto& featureReady : threadsExecutors)
 	{
-		ASSERT_TRUE(featureReady.WaitForThreadFinished());
+		ASSERT_TRUE(featureReady->WaitForThreadFinished());
 	}
 	EXPECT_EQ(container.Size(), elementsShuldBeLeft);
 }

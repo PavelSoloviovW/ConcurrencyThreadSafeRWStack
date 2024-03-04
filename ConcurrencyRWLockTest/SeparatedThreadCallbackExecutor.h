@@ -11,7 +11,7 @@ private:
 
 public:
 	SeparatedThreadCallbackExecutor(const CallbackFunction& testingActionCallback, std::shared_future<void> startProcessFlag);
-	SeparatedThreadCallbackExecutor(const SeparatedThreadCallbackExecutor&& executor);
+	SeparatedThreadCallbackExecutor(SeparatedThreadCallbackExecutor&& executor);
 	SeparatedThreadCallbackExecutor(const SeparatedThreadCallbackExecutor& executor) = delete;
 
 	bool WaitForThreadReady();
@@ -90,10 +90,10 @@ SeparatedThreadCallbackExecutor<CallbackFunction, CallbackFunctionResultType>
 }
 
 template<typename CallbackFunction, typename CallbackFunctionResultType>
-SeparatedThreadCallbackExecutor<CallbackFunction, CallbackFunctionResultType>::SeparatedThreadCallbackExecutor(const SeparatedThreadCallbackExecutor&& executor)
-	:testingActionCallback(std::move(executor.testingActionCallback)),
-	startProcessFlag(std::move(executor.startProcessFlag)),
+SeparatedThreadCallbackExecutor<CallbackFunction, CallbackFunctionResultType>::SeparatedThreadCallbackExecutor(SeparatedThreadCallbackExecutor&& executor)
+	: threadReadyToActionFlag(std::move(executor.threadReadyToActionFlag)),
 	threadActionFinished(std::move(executor.threadActionFinished)),
-	threadReadyToActionFlag(std::move(executor.threadReadyToActionFlag))	//WTF
+	testingActionCallback(std::move(executor.testingActionCallback)),
+	startProcessFlag(std::move(executor.startProcessFlag))
 {
 }
