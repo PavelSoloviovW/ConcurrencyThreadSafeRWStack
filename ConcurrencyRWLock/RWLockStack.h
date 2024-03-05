@@ -69,7 +69,7 @@ namespace ThreadSafeStructs
 	private:
 		std::stack<T> data;
 		boost::shared_mutex mutex;
-		std::condition_variable condVar;
+		std::condition_variable_any condVar;
 	};
 
 	template<typename T>
@@ -122,7 +122,7 @@ namespace ThreadSafeStructs
 	{
 		const std::lock_guard<boost::shared_mutex> lock(mutex);
 		data.push(item);
-		condVar.notify_one();
+		condVar.notify_all();
 		return *this;
 	}
 
@@ -131,7 +131,7 @@ namespace ThreadSafeStructs
 	{
 		const std::lock_guard<boost::shared_mutex> lock(mutex);
 		data.push(std::move(item));
-		condVar.notify_one();
+		condVar.notify_all();
 		return *this;
 	}
 
@@ -203,7 +203,10 @@ namespace ThreadSafeStructs
 	template<typename T>
 	T RWLockStack<T>::WhaitAndPop()
 	{
-		condVar.wait(std::unique_lock(mutex), [data]() { return data.empty(); });
+		auto tmp = data.empty(); //TODO POP if not empty
+
+		std::unique_lock<boost::shared_mutex> uniqueLock(mutex);
+		this->condVar.wait(uniqueLock); //TODO add predicate
 		const std::lock_guard<boost::shared_mutex> lock(mutex);
 
 		auto dataItem = data.top();

@@ -6,7 +6,7 @@ class SeparatedThreadCallbackExecutor
 private:
 	std::promise<void> threadReadyToActionFlag;
 	std::future<void> threadActionFinished;
-	const CallbackFunction testingActionCallback;
+	CallbackFunction testingActionCallback;
 	std::shared_future<void> startProcessFlag;
 
 public:
